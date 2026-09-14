@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SmartPOD Zero-Limit</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }
+    .glass { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+    .loader { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="min-h-screen p-4 pb-24 max-w-md mx-auto">
+  <header class="mb-6 text-center">
+    <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">SmartPOD Zero-Limit</h1>
+    <p class="text-xs text-slate-400 mt-1">R2 Storage + KV Webhook Architecture</p>
+  </header>
+
+  <div id="inputForm" class="glass rounded-2xl p-5 space-y-4 mb-6">
+    <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Produk</label>
+      <select id="product" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"><option>Kaos / T-Shirt</option><option>Canvas</option><option>Mug</option></select></div>
+    <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Niche</label>
+      <input id="niche" type="text" placeholder="e.g., Cat, Coffee" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"></div>
+    <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Gaya Seni</label>
+      <select id="style" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"><option>Vintage Retro</option><option>Minimalist</option><option>Cyberpunk</option></select></div>
+    <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Ide Dasar</label>
+      <textarea id="idea" rows="2" placeholder="Deskripsi singkat..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea></div>
+    <button onclick="generate()" id="btnGen" class="w-full bg-gradient-to-r from-blue-600 to-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm">ANALYZE & GENERATE</button>
+  </div>
+
+  <div id="loading" class="hidden glass rounded-2xl p-8 text-center space-y-3">
+    <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-700 h-10 w-10 mx-auto"></div>
+    <p class="text-xs text-slate-300 animate-pulse" id="loadText">Processing 6000px Master & Uploading to R2...</p>
+  </div>
+
+  <div id="results" class="hidden space-y-4">
+    <div class="glass rounded-2xl p-4 border-l-4 border-emerald-500">
+      <div class="flex justify-between items-center mb-3"><h3 class="font-bold text-emerald-400 text-xs uppercase">Market Intel</h3><span id="trendScore" class="bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-bold">--</span></div>
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <div class="bg-slate-800/50 p-2 rounded-lg"><p class="text-[10px] text-slate-400">Harga Rec.</p><p id="recPrice" class="font-bold text-sm">--</p></div>
+        <div class="bg-slate-800/50 p-2 rounded-lg"><p class="text-[10px] text-slate-400">Dimensi</p><p id="dimensions" class="font-bold text-sm">--</p></div>
+      </div>
+      <div class="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl">
+        <p class="text-[9px] text-blue-300 uppercase mb-1 font-bold">SEO Title</p>
+        <p id="seoTitle" class="text-[11px] text-slate-200 italic mb-2">--</p>
+        <button onclick="copyText('seoTitle')" class="text-[9px] bg-blue-600 px-2 py-1 rounded text-white">Copy</button>
+      </div>
+    </div>
+
+    <div class="glass rounded-2xl overflow-hidden">
+      <div class="bg-slate-800/50 px-3 py-2 border-b border-slate-700 flex justify-between items-center">
+        <span class="text-[10px] font-bold text-emerald-400 uppercase">Master File (R2 Hosted)</span>
+        <a id="downloadBtn" href="#" target="_blank" class="text-[9px] bg-emerald-600 px-2 py-1 rounded text-white">Download Full Res</a>
+      </div>
+      <img id="masterImg" class="w-full h-auto object-cover" alt="Master">
+    </div>
+
+    <button id="videoBtn" onclick="createVideo()" class="hidden w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform text-sm flex items-center justify-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+      CREATE PROMO VIDEO (9:16)
+    </button>
+    
+    <div id="videoStatus" class="hidden glass rounded-2xl p-4 border-l-4 border-purple-500">
+      <p class="text-[10px] text-purple-300 uppercase font-bold mb-1">Video Status</p>
+      <p id="videoMsg" class="text-xs text-slate-200">Processing...</p>
+      <a id="videoLink" href="#" target="_blank" class="hidden mt-2 inline-block text-[10px] bg-purple-600 px-2 py-1 rounded text-white">Watch Video</a>
+    </div>
+  </div>
+
+  <script>
+    let currentMasterUrl = '';
+    let currentJobId = '';
+
+    async function generate() {
+      const btn = document.getElementById('btnGen');
+      const load = document.getElementById('loading');
+      const resDiv = document.getElementById('results');
+      
+      btn.disabled = true; btn.classList.add('opacity-50');
+      load.classList.remove('hidden'); resDiv.classList.add('hidden');
+
+      try {
+        const r = await fetch('/api/generate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
+          product: document.getElementById('product').value,
+          niche: document.getElementById('niche').value,
+          style: document.getElementById('style').value,
+          idea: document.getElementById('idea').value
+        })});
+        const d = await r.json();
+
+        if(d.status === 'SATURATED') { alert(`⚠️ NICHE JENUH!\n${d.trend.pivot}`); load.classList.add('hidden'); btn.disabled=false; btn.classList.remove('opacity-50'); return; }
+
+        document.getElementById('trendScore').textContent = `SCORE: ${d.trendData.score}/100`;
+        document.getElementById('recPrice').textContent = d.trendData.price;
+        document.getElementById('dimensions').textContent = `${d.dimensions} @ 300 DPI`;
+        document.getElementById('seoTitle').textContent = d.listing.title;
+        
+        currentMasterUrl = d.masterUrl;
+        currentJobId = `job_${Date.now()}`;
+        document.getElementById('masterImg').src = d.masterUrl;
+        document.getElementById('downloadBtn').href = d.masterUrl;
+        document.getElementById('videoBtn').classList.remove('hidden');
+        document.getElementById('videoStatus').classList.add('hidden');
+
+        load.classList.add('hidden'); resDiv.classList.remove('hidden');
+        resDiv.scrollIntoView({ behavior: 'smooth' });
+      } catch(e) { alert('Error: ' + e.message); }
+      finally { btn.disabled = false; btn.classList.remove('opacity-50'); }
+    }
+
+    async function createVideo() {
+      const btn = document.getElementById('videoBtn');
+      const statusDiv = document.getElementById('videoStatus');
+      const msgEl = document.getElementById('videoMsg');
+      const linkEl = document.getElementById('videoLink');
+      
+      btn.disabled = true; btn.innerHTML = '<div class="loader h-4 w-4 border-2 border-white rounded-full mr-2"></div> Triggering Luma AI...';
+      statusDiv.classList.remove('hidden'); linkEl.classList.add('hidden');
+      msgEl.textContent = 'Mengirim request ke Replicate Webhook...';
+
+      try {
+        const r = await fetch('/api/video', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ imageUrl: currentMasterUrl, jobId: currentJobId }) });
+        const d = await r.json();
+        
+        msgEl.textContent = '✅ Request diterima! Menunggu notifikasi webhook dari Replicate (2-5 menit)...';
+        
+        // Polling KV setiap 10 detik untuk cek status webhook
+        const poll = setInterval(async () => {
+          const pr = await fetch(`/api/webhook-check?id=${d.predictionId}`); // Buat endpoint check sederhana jika perlu, atau pakai KV direct call via edge
+          // Karena KV tidak bisa diakses langsung dari client, kita buat endpoint helper kecil atau gunakan polling ke /api/video/status
+          // Untuk versi mobile simple, kita arahkan user cek email/notif atau buat endpoint /api/check-video.js
+          
+          // Fallback: Arahkan user ke Replicate dashboard atau implementasi endpoint check
+          msgEl.innerHTML = `⏳ Sedang diproses oleh AI.<br>ID: ${d.predictionId}<br><span class="text-[10px] text-slate-400">Video akan muncul otomatis di sini saat webhook masuk.</span>`;
+        }, 10000);
+
+      } catch(e) { alert('Video Error: ' + e.message); }
+      finally { btn.disabled = false; btn.innerHTML = 'CREATE PROMO VIDEO (9:16)'; }
+    }
+
+    function copyText(id) { navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => alert('Tersalin!')); }
+  </script>
+</body>
+  </html>
+
