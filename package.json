@@ -1,0 +1,10 @@
+{
+  "name": "smartpod-zero-limit",
+  "version": "1.0.0",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@vercel/kv": "^2.0.0",
+    "sharp": "^0.33.0"
+  }
+}
+
