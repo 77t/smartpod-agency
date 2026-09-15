@@ -2,135 +2,131 @@
 import sharp from 'sharp';
 import https from 'https';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { kv } from '@vercel/kv';
 
-// 1. Konfigurasi Environment Variables (SUDAH DIGANTI KE SUPABASE)
+// 1. Konfigurasi Environment Variables
 const HF_TOKEN = process.env.HF_TOKEN;
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN; // Opsional jika pakai Replicate
 
-// Variabel Supabase S3 (Pastikan nama ini sama persis dengan di Vercel Settings)
-const SUPABASE_BUCKET = process.env.SUPABASE_S3_BUCKET || 'master-assets'; 
-const SUPABASE_PUBLIC_URL = process.env.SUPABASE_S3_PUBLIC_URL; 
+// Variabel Supabase S3
+const SUPABASE_BUCKET = process.env.SUPABASE_S3_BUCKET || 'master-assets';
+const SUPABASE_PUBLIC_URL = process.env.SUPABASE_S3_PUBLIC_URL;
 
 // 2. Inisialisasi S3 Client untuk SUPABASE
 const s3 = new S3Client({
-  region: process.env.SUPABASE_S3_REGION || 'ap-southeast-1', // Sesuaikan region Supabase Anda
-  endpoint: process.env.SUPABASE_S3_ENDPOINT, // Wajib: URL endpoint Supabase Storage
+  region: process.env.SUPABASE_S3_REGION || 'ap-southeast-1',
+  endpoint: process.env.SUPABASE_S3_ENDPOINT, 
   credentials: {
     accessKeyId: process.env.SUPABASE_S3_ACCESS_KEY,
     secretAccessKey: process.env.SUPABASE_S3_SECRET_KEY,
   },
-  forcePathStyle: true, // PENTING: Wajib true untuk Supabase Storage!
+  forcePathStyle: true, 
 });
 
-// Helper function untuk fetch JSON (tetap sama)
+// Helper function untuk fetch JSON (Native Node.js)
 const fetchJson = (url, options) => new Promise((resolve, reject) => {
   const req = https.request(url, options, res => {
     let d = '';
     res.on('data', c => d += c);
-    res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+    res.on('end', () => {
+      try { resolve(JSON.parse(d)); } 
+      catch(e) { reject(e); }
+    });
   });
   req.on('error', reject);
   if (options.body) req.write(options.body);
   req.end();
 });
 
-// Fungsi Generate Prompt & Trend (Tetap sama)
+// Fungsi Generate Prompt & Trend
 function getTrendAndPrompt(niche, style, idea) {
   const score = Math.floor(Math.random() * 40) + 60;
   const saturated = score > 75;
-  const imperfections = ["Subtle vintage paper grain overlay", "Screen-print misregistration", "Hand-drawn line variation"];
-  const hooks = { "Vintage Retro": "1970s psychedelic typography with warm fade", "Minimalist": "Japanese Ma negative space" };
+  const imperfections = ["Subtle vintage paper grain overlay", "Screen-print misregistration", "Hand-drawn lines"];
+  const hooks = { "Vintage Retro": "1970s psychedelic typography with warm fade", "Minimalist": "Japanese Ma aesthetic" };
   
   return {
-    prompt: `[ARTISTIC]: ${hooks[style] || 'authentic human illustration'}\n[IMPERFECTION]: ${imperfections}\n[AVOID]: AI smoothness\n[NICHE]: ${niche}\n[IDEA]: ${idea}`,
-    trend: { score, saturated, price: score > 85 ? "$24.99-$34.99" : "$19.99-$27.99", pivot: saturated ? `${niche} is crowded` : 'Green light' },
-    listing: { title: `${niche} ${style} Art | Vintage Aesthetic POD`, tags: [`${niche} aesthetic`, `vintage ${style}`] }
+    prompt: `[ARTISTIC]: ${hooks[style] || 'authentic human illustration'}\n[IMPERFECTION]: ${imperfections.join(', ')}`,
+    trend: { score, saturated, price: score > 85 ? "$24.99-$34.99" : "$19.99-$27.99", pivot: saturated ? 'high' : 'mid' },
+    listing: { title: `${niche} ${style} Art | Vintage Aesthetic POD`, tags: [`${niche} aesthetic`, 'vintage'] }
   };
 }
 
+// MAIN HANDLER - WAJIB EXPORT DEFAULT ASYNC FUNCTION
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  // Set CORS Headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   try {
     const { product, niche, style, idea } = req.body;
+    
+    if (!product || !niche || !style) {
+      return res.status(400).json({ error: 'Missing required fields: product, niche, style' });
+    }
+
     const intel = getTrendAndPrompt(niche, style, idea);
 
-    if (intel.trend.saturated) return res.json({ status: 'SATURATED', ...intel });
+    // Jika trend saturated, kembalikan data saja tanpa generate gambar (opsional logic lama)
+    if (intel.trend.saturated) {
+      return res.json({ status: 'SATURATED', ...intel });
+    }
 
     // 1. Generate SDXL via HuggingFace
     const sdRes = await fetchJson('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: { 
+        'Authorization': `Bearer ${HF_TOKEN}`, 
+        'Content-Type': 'application/json' 
+      },
       body: JSON.stringify({ inputs: intel.prompt })
     });
 
-    if (!sdRes[0]?.image) throw new Error('SD Generation failed');
-    const rawBuf = Buffer.from(sdRes[0].image, 'base64');
-
-    // 2. Upscale 4K via Replicate (Opsional - sesuaikan ID model jika perlu)
-    const repRes = await fetchJson('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: { 'Authorization': `Token ${REPLICATE_API_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        version: "da5844d15d481e77e1f1d62c1d044943f9ebae449553b43a9b1c7c94544d673b", 
-        input: { image: `data:image/png;base64,${rawBuf.toString('base64')}`, scale: 4 } 
-      })
-    });
-    
-    // Note: Di production, gunakan webhook Replicate. Untuk demo ini kita asumsikan output langsung tersedia atau tunggu sync.
-    // Jika Replicate async, Anda perlu polling. Di sini kita skip detail polling agar kode tetap ringkas.
-    // Asumsi: upscaleUrl didapat dari output Replicate (atau gunakan rawBuf jika skip upscale)
-    const upscaleUrl = repRes.output?.[0] || repRes.urls?.get; 
-    
-    // 3. Fetch Upscaled Image & Process with Sharp (Zero-Limit via Stream)
-    // Karena serverless tidak bisa fetch URL besar langsung ke buffer tanpa limit,
-    // kita proses raw SDXL yang sudah diupscale secara lokal jika URL gagal, 
-    // atau stream dari URL upscale jika berhasil.
-    let processSource = rawBuf; 
-    
-    if (upscaleUrl && upscaleUrl.startsWith('http')) {
-        // Fetch image dari URL upscale (perlu handling stream untuk serverless)
-        // Untuk kesederhanaan demo ini, kita pakai rawBuf yang di-resize sharp sebagai fallback aman
-        // Jika ingin pakai upscaleUrl asli, butuh library 'node-fetch' atau stream handling khusus
+    // Cek jika HF mengembalikan error (biasanya object {error: "..."})
+    if (sdRes.error) {
+      throw new Error(`HuggingFace Error: ${sdRes.error}`);
     }
 
-    // Resize & Optimize untuk Web (Master File)
-    const optimizedBuffer = await sharp(processSource)
-      .resize(3000, null, { withoutEnlargement: true }) // Max width 3000px
-      .jpeg({ quality: 90, progressive: true })
+    // 2. Process Image dengan Sharp (Resize ke 6000px width)
+    // sdRes adalah Buffer binary dari HF
+    const processedImageBuffer = await sharp(sdRes)
+      .resize(6000, null, { withoutEnlargement: true }) 
+      .jpeg({ quality: 90 })
       .toBuffer();
 
-    // 4. UPLOAD KE SUPABASE S3 (BAGIAN KRUSIAL YANG DIPERBAIKI)
+    // 3. Upload ke Supabase Storage
     const fileName = `masters/${Date.now()}-${niche.replace(/\s+/g, '-')}.jpg`;
-    
-    await s3.send(new PutObjectCommand({
+    const uploadParams = {
       Bucket: SUPABASE_BUCKET,
       Key: fileName,
-      Body: optimizedBuffer,
+      Body: processedImageBuffer,
       ContentType: 'image/jpeg',
-      ACL: 'public-read' // Pastikan bucket Supabase Anda setting public atau gunakan signed URL
-    }));
+    };
 
-    const masterUrl = `${SUPABASE_PUBLIC_URL}/${fileName}`;
+    await s3.send(new PutObjectCommand(uploadParams));
 
-    // Simpan metadata ke KV (Opsional)
-    await kv.set(`meta:${fileName}`, JSON.stringify({ niche, style, score: intel.trend.score }));
+    const imageUrl = `${SUPABASE_PUBLIC_URL}/${fileName}`;
 
-    // Return Result
-    res.status(200).json({
-      masterUrl,
-      trendData: intel.trend,
-      listing: intel.listing,
-      dimensions: "3000x(auto) @ 300 DPI"
+    // 4. Return Success Response
+    return res.status(200).json({
+      status: 'SUCCESS',
+      imageUrl: imageUrl,
+      ...intel
     });
 
-  } catch (err) {
-    console.error('Generate Error:', err);
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error('Generate Error:', error);
+    return res.status(500).json({ 
+      error: 'Internal Server Error', 
+      details: error.message 
+    });
   }
-      }
 }
-        }
-
-
